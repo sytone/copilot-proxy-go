@@ -140,13 +140,78 @@ func TestChatCompletionsAllowsSupportedEndpointAndCallsUpstream(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsAllowsUnknownEndpointSupportAndCallsUpstream(t *testing.T) {
+	appState := &state.State{}
+	appState.SetModels([]state.Model{{ID: "gpt-5.6-terra"}})
+	upstream := &chatValidationCopilot{}
+	h := New(Dependencies{
+		State:   appState,
+		Metrics: responsesTestMetrics{},
+		Copilot: upstream,
+		Config:  responsesTestConfig{},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(
+		`{"model":"gpt-5.6-terra","messages":[{"role":"user","content":"hello"}]}`,
+	))
+	recorder := httptest.NewRecorder()
+	h.ChatCompletions(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if upstream.chatCalls != 1 {
+		t.Fatalf("expected one upstream chat call, got %d", upstream.chatCalls)
+	}
+}
+
+func TestChatCompletionsResolvesPublicModelIDForValidation(t *testing.T) {
+	appState := &state.State{}
+	appState.SetModels([]state.Model{{
+		ID:                 "claude-opus-4.8",
+		SupportedEndpoints: []string{"/chat/completions"},
+	}})
+	upstream := &chatValidationCopilot{}
+	h := New(Dependencies{
+		State:   appState,
+		Metrics: responsesTestMetrics{},
+		Copilot: upstream,
+		Config:  responsesTestConfig{},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(
+		`{"model":"claude-opus-4-8","messages":[{"role":"user","content":"hello"}]}`,
+	))
+	recorder := httptest.NewRecorder()
+	h.ChatCompletions(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if upstream.chatCalls != 1 {
+		t.Fatalf("expected one upstream chat call, got %d", upstream.chatCalls)
+	}
+
+	var forwarded struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(upstream.body, &forwarded); err != nil {
+		t.Fatalf("unmarshal forwarded body: %v", err)
+	}
+	if forwarded.Model != "claude-opus-4.8" {
+		t.Fatalf("expected rewritten copilot model id, got %q", forwarded.Model)
+	}
+}
+
 type chatValidationCopilot struct {
 	chatCalls int
+	body      []byte
 }
 
 func (*chatValidationCopilot) FetchModels(context.Context) ([]state.Model, error) { return nil, nil }
-func (c *chatValidationCopilot) ProxyChatCompletionEx(context.Context, []byte, bool, bool) (*http.Response, error) {
+func (c *chatValidationCopilot) ProxyChatCompletionEx(_ context.Context, body []byte, _ bool, _ bool) (*http.Response, error) {
 	c.chatCalls++
+	c.body = append([]byte(nil), body...)
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     make(http.Header),

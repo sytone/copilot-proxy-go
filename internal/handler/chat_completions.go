@@ -73,31 +73,36 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if len(h.state.GetModels()) == 0 {
 		if fetched, err := h.copilot.FetchModels(r.Context()); err == nil {
 			h.state.SetModels(fetched)
+		} else {
+			slog.Warn("chat model validation skipped catalog refresh", "error", err)
 		}
 	}
 
-	model := h.state.FindModel(modelName)
+	modelID := ResolveCopilotModel(modelName)
+	model := h.state.FindModel(modelID)
 	if model == nil {
 		api.ForwardError(w, api.InvalidRequest(fmt.Sprintf(`model %q is unavailable`, modelName), nil))
 		return
 	}
-	supportsChatCompletions := false
-	for _, endpoint := range model.SupportedEndpoints {
-		if endpoint == "/chat/completions" {
-			supportsChatCompletions = true
-			break
+	if len(model.SupportedEndpoints) > 0 {
+		supportsChatCompletions := false
+		for _, endpoint := range model.SupportedEndpoints {
+			if endpoint == "/chat/completions" {
+				supportsChatCompletions = true
+				break
+			}
 		}
-	}
-	if !supportsChatCompletions {
-		message := fmt.Sprintf(`model %q is not accessible via the /chat/completions endpoint`, modelName)
-		if len(model.SupportedEndpoints) > 0 {
-			message = fmt.Sprintf("%s (supported endpoints: %s)", message, strings.Join(model.SupportedEndpoints, ", "))
+		if !supportsChatCompletions {
+			message := fmt.Sprintf(`model %q is not accessible via the /chat/completions endpoint`, modelName)
+			if len(model.SupportedEndpoints) > 0 {
+				message = fmt.Sprintf("%s (supported endpoints: %s)", message, strings.Join(model.SupportedEndpoints, ", "))
+			}
+			api.ForwardError(w, api.InvalidRequest(
+				message,
+				nil,
+			))
+			return
 		}
-		api.ForwardError(w, api.InvalidRequest(
-			message,
-			nil,
-		))
-		return
 	}
 
 	resp, err := h.copilot.ProxyChatCompletionEx(r.Context(), body, isAgent, false)
