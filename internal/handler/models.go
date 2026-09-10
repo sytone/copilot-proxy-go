@@ -15,14 +15,15 @@ type ModelsListResponse struct {
 
 // ModelEntry is a single model in the list response.
 type ModelEntry struct {
-	ID              string `json:"id"`
-	Object          string `json:"object"`
-	Type            string `json:"type"`
-	Created         int    `json:"created"`
-	OwnedBy         string `json:"owned_by"`
-	DisplayName     string `json:"display_name,omitempty"`
-	ContextWindow   int    `json:"context_window,omitempty"`
-	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+	ID                 string   `json:"id"`
+	Object             string   `json:"object"`
+	Type               string   `json:"type"`
+	Created            int      `json:"created"`
+	OwnedBy            string   `json:"owned_by"`
+	DisplayName        string   `json:"display_name,omitempty"`
+	ContextWindow      int      `json:"context_window,omitempty"`
+	MaxOutputTokens    int      `json:"max_output_tokens,omitempty"`
+	SupportedEndpoints []string `json:"supported_endpoints,omitempty"`
 }
 
 // Models handles GET /models and /v1/models.
@@ -55,14 +56,15 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[publicID] = struct{}{}
 		entries = append(entries, ModelEntry{
-			ID:              publicID,
-			Object:          "model",
-			Type:            "model",
-			Created:         0,
-			OwnedBy:         m.Vendor,
-			DisplayName:     m.Name,
-			ContextWindow:   m.Capabilities.Limits.MaxContextWindowTokens,
-			MaxOutputTokens: m.Capabilities.Limits.MaxOutputTokens,
+			ID:                 publicID,
+			Object:             "model",
+			Type:               "model",
+			Created:            0,
+			OwnedBy:            m.Vendor,
+			DisplayName:        m.Name,
+			ContextWindow:      m.Capabilities.Limits.MaxContextWindowTokens,
+			MaxOutputTokens:    m.Capabilities.Limits.MaxOutputTokens,
+			SupportedEndpoints: append([]string(nil), m.SupportedEndpoints...),
 		})
 	}
 

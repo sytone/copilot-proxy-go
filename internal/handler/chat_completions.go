@@ -70,6 +70,26 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	rec.Initiator = initiatorStr(isAgent)
 	rec.Streaming = isStream
 
+	model := h.state.FindModel(modelName)
+	if model == nil {
+		api.ForwardError(w, api.InvalidRequest(fmt.Sprintf(`model %q is unavailable`, modelName), nil))
+		return
+	}
+	supportsChatCompletions := false
+	for _, endpoint := range model.SupportedEndpoints {
+		if endpoint == "/chat/completions" {
+			supportsChatCompletions = true
+			break
+		}
+	}
+	if !supportsChatCompletions {
+		api.ForwardError(w, api.InvalidRequest(
+			fmt.Sprintf(`model %q is not accessible via the /chat/completions endpoint`, modelName),
+			nil,
+		))
+		return
+	}
+
 	resp, err := h.copilot.ProxyChatCompletionEx(r.Context(), body, isAgent, false)
 	if err != nil {
 		api.ForwardError(w, err)
