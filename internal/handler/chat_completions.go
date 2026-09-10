@@ -87,6 +87,8 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+	// Older/partial catalogs may omit supported_endpoints; treat empty as unknown
+	// and allow upstream to decide rather than blocking valid requests.
 	if len(model.SupportedEndpoints) > 0 {
 		supportsChatCompletions := false
 		for _, endpoint := range model.SupportedEndpoints {
