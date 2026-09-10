@@ -81,7 +81,10 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	modelID := ResolveCopilotModel(modelName)
 	model := h.state.FindModel(modelID)
 	if model == nil {
-		api.ForwardError(w, api.InvalidRequest(fmt.Sprintf(`model %q is unavailable`, modelName), nil))
+		api.ForwardError(w, api.InvalidRequest(
+			fmt.Sprintf(`model %q is unavailable in the Copilot model catalog; call /v1/models to list available models`, modelName),
+			nil,
+		))
 		return
 	}
 	if len(model.SupportedEndpoints) > 0 {
@@ -93,10 +96,12 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !supportsChatCompletions {
-			message := fmt.Sprintf(`model %q is not accessible via the /chat/completions endpoint`, modelName)
-			message = fmt.Sprintf("%s (supported endpoints: %s)", message, strings.Join(model.SupportedEndpoints, ", "))
 			api.ForwardError(w, api.InvalidRequest(
-				message,
+				fmt.Sprintf(
+					`model %q is not accessible via the /chat/completions endpoint (supported endpoints: %s)`,
+					modelName,
+					strings.Join(model.SupportedEndpoints, ", "),
+				),
 				nil,
 			))
 			return
