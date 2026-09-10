@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"github.com/tonghaoch/copilot-proxy-go/internal/service"
 	"github.com/tonghaoch/copilot-proxy-go/internal/state"
 )
+
+const chatCompletionsEndpoint = "/chat/completions"
 
 // ChatCompletions handles POST /chat/completions and /v1/chat/completions.
 // It proxies requests to the Copilot API, supporting both streaming and
@@ -90,18 +93,12 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	// Older/partial catalogs may omit supported_endpoints; treat empty as unknown
 	// and allow upstream to decide rather than blocking valid requests.
 	if len(model.SupportedEndpoints) > 0 {
-		supportsChatCompletions := false
-		for _, endpoint := range model.SupportedEndpoints {
-			if endpoint == "/chat/completions" {
-				supportsChatCompletions = true
-				break
-			}
-		}
-		if !supportsChatCompletions {
+		if !slices.Contains(model.SupportedEndpoints, chatCompletionsEndpoint) {
 			api.ForwardError(w, api.InvalidRequest(
 				fmt.Sprintf(
-					`model %q is not accessible via the /chat/completions endpoint (supported endpoints: %s)`,
+					"model %q is not accessible via the %s endpoint (supported endpoints: %s)",
 					modelName,
+					chatCompletionsEndpoint,
 					strings.Join(model.SupportedEndpoints, ", "),
 				),
 				nil,
