@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"github.com/tonghaoch/copilot-proxy-go/internal/service"
 	"github.com/tonghaoch/copilot-proxy-go/internal/state"
 )
+
+const chatCompletionsEndpoint = "/chat/completions"
 
 // ChatCompletions handles POST /chat/completions and /v1/chat/completions.
 // It proxies requests to the Copilot API, supporting both streaming and
@@ -69,6 +72,40 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	rec.RoutedModel = modelName
 	rec.Initiator = initiatorStr(isAgent)
 	rec.Streaming = isStream
+
+	if len(h.state.GetModels()) == 0 {
+		if fetched, err := h.copilot.FetchModels(r.Context()); err == nil {
+			h.state.SetModels(fetched)
+		} else {
+			slog.Warn("chat model validation skipped catalog refresh", "error", err)
+		}
+	}
+
+	modelID := ResolveCopilotModel(modelName)
+	model := h.state.FindModel(modelID)
+	if model == nil {
+		api.ForwardError(w, api.InvalidRequest(
+			fmt.Sprintf(`model %q is unavailable in the Copilot model catalog; call /v1/models to list available models`, modelName),
+			nil,
+		))
+		return
+	}
+	// Older/partial catalogs may omit supported_endpoints; treat empty as unknown
+	// and allow upstream to decide rather than blocking valid requests.
+	if len(model.SupportedEndpoints) > 0 {
+		if !slices.Contains(model.SupportedEndpoints, chatCompletionsEndpoint) {
+			api.ForwardError(w, api.InvalidRequest(
+				fmt.Sprintf(
+					"model %q is not accessible via the %s endpoint (supported endpoints: %s)",
+					modelName,
+					chatCompletionsEndpoint,
+					strings.Join(model.SupportedEndpoints, ", "),
+				),
+				nil,
+			))
+			return
+		}
+	}
 
 	resp, err := h.copilot.ProxyChatCompletionEx(r.Context(), body, isAgent, false)
 	if err != nil {
