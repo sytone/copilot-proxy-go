@@ -94,9 +94,7 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 		if !supportsChatCompletions {
 			message := fmt.Sprintf(`model %q is not accessible via the /chat/completions endpoint`, modelName)
-			if len(model.SupportedEndpoints) > 0 {
-				message = fmt.Sprintf("%s (supported endpoints: %s)", message, strings.Join(model.SupportedEndpoints, ", "))
-			}
+			message = fmt.Sprintf("%s (supported endpoints: %s)", message, strings.Join(model.SupportedEndpoints, ", "))
 			api.ForwardError(w, api.InvalidRequest(
 				message,
 				nil,
